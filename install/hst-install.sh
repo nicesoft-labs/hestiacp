@@ -40,37 +40,44 @@ if [ ! -z "$(grep ^admin: /etc/group)" ] && [ -z "$1" ]; then
 fi
 
 # Detect OS
-if [ -e "/etc/os-release" ] && [ ! -e "/etc/redhat-release" ]; then
-	type=$(grep "^ID=" /etc/os-release | cut -f 2 -d '=')
-	if [ "$type" = "ubuntu" ]; then
-		# Check if lsb_release is installed
-		if [ -e '/usr/bin/lsb_release' ]; then
-			release="$(lsb_release -s -r)"
-			VERSION='ubuntu'
-		else
-			echo "lsb_release is currently not installed, please install it:"
-			echo "apt-get update && apt-get install lsb-release"
-			exit 1
-		fi
-	elif [ "$type" = "debian" ]; then
-		release=$(cat /etc/debian_version | grep -o "[0-9]\{1,2\}" | head -n1)
-		VERSION='debian'
-	else
-		type="NoSupport"
-	fi
+if [ -e "/etc/os-release" ]; then
+        type=$(grep "^ID=" /etc/os-release | cut -f 2 -d '=' | tr -d '"')
+        type_like=$(grep "^ID_LIKE=" /etc/os-release | cut -f 2 -d '=' | tr -d '"')
+
+        if [ "$type" = "ubuntu" ]; then
+                # Check if lsb_release is installed
+                if [ -e '/usr/bin/lsb_release' ]; then
+                        release="$(lsb_release -s -r)"
+                        VERSION='ubuntu'
+                else
+                        echo "lsb_release is currently not installed, please install it:"
+                        echo "apt-get update && apt-get install lsb-release"
+                        exit 1
+                fi
+        elif [ "$type" = "debian" ]; then
+                release=$(cat /etc/debian_version | grep -o "[0-9]\{1,2\}" | head -n1)
+                VERSION='debian'
+        elif [[ "$type" =~ ^nice ]] || [[ "$type_like" =~ nice ]] || { [ -e "/etc/redhat-release" ] && [[ "$type_like" =~ (rhel|centos) ]]; } ; then
+                release=$(awk -F= '/^VERSION_ID/ {gsub(/"/,"",$2); print $2}' /etc/os-release | cut -d '.' -f 1)
+                VERSION='niceos'
+                type='niceos'
+        else
+                type="NoSupport"
+        fi
 else
 	type="NoSupport"
 fi
 
 no_support_message() {
-	echo "****************************************************"
-	echo "Your operating system (OS) is not supported by"
-	echo "Hestia Control Panel. Officially supported releases:"
-	echo "****************************************************"
-	echo "  Debian 11, 12"
-	echo "  Ubuntu 20.04, 22.04, 24.04 LTS"
-	echo ""
-	exit 1
+        echo "****************************************************"
+        echo "Your operating system (OS) is not supported by"
+        echo "Hestia Control Panel. Officially supported releases:"
+        echo "****************************************************"
+        echo "  Debian 11, 12"
+        echo "  Ubuntu 20.04, 22.04, 24.04 LTS"
+        echo "  NICE.OS 5+"
+        echo ""
+        exit 1
 }
 
 if [ "$type" = "NoSupport" ]; then
@@ -107,8 +114,8 @@ check_wget_curl() {
 
 # Check for supported operating system before proceeding with download
 # of OS-specific installer, and throw error message if unsupported OS detected.
-if [[ "$release" =~ ^(11|12|20.04|22.04|24.04)$ ]]; then
-	check_wget_curl $*
+if [[ "$release" =~ ^(11|12|20.04|22.04|24.04)$ ]] || { [ "$VERSION" = "niceos" ] && [[ "$release" =~ ^[5-9]$ ]]; }; then
+        check_wget_curl $*
 else
 	no_support_message
 fi
